@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Spring XD visualisation demo</title>
+<meta charset="utf-8">
+<style type="text/css">
+
+body {
+  font: 12px sans-serif;
+  text-rendering: optimizelegibility;
+}
+
+.arc path {
+    stroke: #fff;
+}
+
+.aggbar {
+  margin-left: 10px;
+  font: 10px sans-serif;
+  shape-rendering: crispEdges;
+}
+
+.aggbar rect {
+  stroke: white;
+  fill: steelblue;
+}
+
+.aggbar text.bar {
+  fill: white;
+}
+
+</style>
+<link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
+</head>
+<body>
+
+<!--
+This is all the content we need - some simple layouts, define our containers to use later
+on, and that's it.
+
+For more details on getting started with D3, check out the docs at 
+https://github.com/mbostock/d3/wiki/Tutorials
+-->
+
+<div class="container-fluid">
+  <div class="row-fluid">
+    <div class="span5">
+      <div class="row-fluid">
+        <div class="span12">
+          <p id="piemenu"><b>Field Value Counter (Pie): </b><br><select></select></p>
+          <p id="pie"></p>
+        </div>
+      </div>
+      <div class="row-fluid">
+        <div class="span12">
+          <div id="barmenu"><b>Aggregate Counter: </b><br><select></select> </div>
+        </div>
+      </div>
+      <div class="row-fluid">
+        <div class="span12">
+          <p id="bar"></p>
+        </div>
+      </div>
+    </div>
+    <div class="span7">
+      <p id="bubblemenu"><b>Field Value Counter (Bubble): </b><br><select></select></p>
+      <p id="bubbles"></p>
+    </div>
+</div>
+
+<!-- Import all of the JS needed to do all the actual rendering -->
+<script src="js/jquery-1.10.2.min.js"></script>
+<script src="js/d3.v3.min.js"></script>
+<script src="js/fvc.js"></script>
+<script src="js/aggcount.js"></script>
+<script src="js/bootstrap.js"></script>
+
+<!--
+This is where we define the source of our data, and the size of our charts and
+what they should be displaying. This is where you can throw in your own charts, style,
+layout, and configure new source to pull counter data from Spring XD.
+
+baseurl is where Spring XD is presenting it's local HTTP interface - throw a web
+browser at that URL and check you see the metrics tree you expect and can browser OK 
+
+Of interest are the lines with "d3.json(baseUrl" at the start - this is where the 
+individual Spring XD counters' data is pulled from. You can check with a web browser
+that you've got the right path to them.
+-->
+
+<script>
+  var baseUrl = "http://localhost:9393/metrics";
+
+  var barchart = aggregateCountBarChart()
+        .width(450)
+        .height(500);
+
+  var piechart = fvcPieChart()
+         .width(350)
+         .height(350)
+         .r(150);
+
+  var bubblechart = fvcBubbleChart()
+         .diameter(700);
+
+  var piemenu = d3.select("#piemenu select");
+
+  var barmenu = d3.select("#barmenu select")
+      .on("change", function() {
+        d3.select("#bar").select("svg").remove();
+        redraw();
+      });
+
+  var bubblemenu = d3.select("#bubblemenu select");
+
+  function redraw() {
+    var fvc = piemenu.property("value");
+    if (fvc) {
+      d3.json(baseUrl + "/field-value-counters/" + fvc)
+      .get(function(error, json) {
+        if (error) return console.warn(error);
+        var data = d3.entries(json.counts);
+        data.sort(function(a,b) { return b.value - a.value; });
+        d3.select("#pie")
+            .datum(data)
+            .call(piechart);
+      });
+    }
+    fvc = bubblemenu.property("value");
+    if (fvc) {
+      d3.json(baseUrl + "/field-value-counters/" + fvc)
+      .get(function(error, json) {
+        if (error) return console.warn(error);
+        var data = d3.entries(json.counts);
+        data.sort(function(a,b) { return b.value - a.value; });
+        data.splice(500);
+        d3.select("#bubbles")
+            .datum(data)
+            .call(bubblechart);
+      });
+    }
+    var bar = barmenu.property("value");
+    if (bar) {
+      d3.json(baseUrl + "/aggregate-counters/" + bar + "?resolution=minute")
+      .get(function(error, json) {
+        if (error) return console.warn(error);
+        var data = d3.entries(json.counts);
+        while (data.length > 0 && data[0].value == 0) {
+          data.shift();
+        }
+
+        d3.select("#bar")
+            .datum(data)
+            .call(barchart);
+      });
+    }
+  }
+
+  function setMenuOptions(menu, metricType) {
+    d3.json(baseUrl + "/" + metricType)
+        .get(function(error, json) {
+            if (error) return console.warn(error);
+            var metrics = json.content.map(function(d) {
+              return d.name;
+            });
+            menu.selectAll("option")
+                .data(metrics.sort().reverse())
+                .enter().append("option")
+                .text(function(d) { return d; });
+    });
+  }
+
+  setMenuOptions(piemenu, "field-value-counters");
+  setMenuOptions(bubblemenu, "field-value-counters");
+  setMenuOptions(barmenu, "aggregate-counters");
+
+  redraw.call();
+  setInterval(redraw, 2000);
+</script>
+
+<!-- And we're done - very simple config to produce some powerful visualisation from our
+data counters -->
+
+</body>
+</html>
+
